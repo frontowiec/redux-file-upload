@@ -54,7 +54,6 @@ class FileUploader {
 
         this.loadEpic$ = action$ => action$.pipe(
             ofTypeRegExp(/(.*)\/FILE_UPLOAD_STARTED$/),
-            tap(console.log),
             tap(({payload}) => {
                 const {url, method, password, username, async = true} = this.requestConfiguration;
                 this.requestRepository.getRequest(payload).open(method, url, async, username, password);
@@ -65,7 +64,7 @@ class FileUploader {
             mergeMap(({payload}) =>
                 fromEvent(this.requestRepository.getRequest(payload), 'load').pipe(
                     filter((e: ProgressEvent) => e.target!['status'] === 200),
-                    mapTo(({type: 'FILE_UPLOAD_SUCCESS', payload}))
+                    mapTo(({type: `${this.actionsPrefix}/FILE_UPLOAD_SUCCESS`, payload}))
                 ))
         );
 
@@ -74,7 +73,7 @@ class FileUploader {
             mergeMap(({payload}) =>
                 fromEvent(this.requestRepository.getRequest(payload).upload, 'progress').pipe(
                     map((e: ProgressEvent) => ({
-                        type: 'FILE_PROGRESS_CHANGED',
+                        type: `${this.actionsPrefix}/FILE_PROGRESS_CHANGED`,
                         payload: {
                             progress: Math.round((e.loaded / e.total) * 100),
                             id: payload
@@ -89,14 +88,16 @@ class FileUploader {
                 fromEvent(this.requestRepository.getRequest(payload), 'readystatechange').pipe(
                     filter(() => this.requestRepository.getRequest(payload).readyState === 4),
                     filter(() => this.requestRepository.getRequest(payload).status !== 200),
-                    mapTo({type: 'FILE_UPLOAD_FAILURE', payload})
+                    mapTo({type: `${this.actionsPrefix}/FILE_UPLOAD_FAILURE`, payload})
                 ))
         );
 
         this.uploadFilesEpic$ = action$ => action$.pipe(
             ofTypeRegExp(/(.*)\/UPLOAD_FILES$/),
-            tap(console.log),
-            map(() => this.filesRepository.getIds().map(id => of({type: `${this.actionsPrefix}/FILE_UPLOAD_STARTED`, payload: id}))),
+            map(() => this.filesRepository.getIds().map(id => of({
+                type: `${this.actionsPrefix}/FILE_UPLOAD_STARTED`,
+                payload: id
+            }))),
             mergeMap(idObservable => concat(...idObservable))
         );
     }
@@ -131,18 +132,18 @@ class FileUploader {
         // todo: cannot remove file when uploading
         this.filesRepository.remove(id);
         this.requestRepository.remove(id);
-        return {type: 'REMOVE_FILE', payload: id};
+        return {type: `${this.actionsPrefix}/REMOVE_FILE`, payload: id};
     }
 
     public cancelFileUpload(id: string) {
         this.requestRepository.getRequest(id).abort();
-        return {type: 'FILE_UPLOAD_CANCELED', payload: id};
+        return {type: `${this.actionsPrefix}/FILE_UPLOAD_CANCELED`, payload: id};
     }
 
     public clearAll() {
         this.filesRepository.clearAll();
         this.requestRepository.clearAll();
-        return {type: 'CLEAR_FILES'};
+        return {type: `${this.actionsPrefix}/CLEAR_FILES`};
     }
 
     public createReducer() {
