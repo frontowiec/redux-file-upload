@@ -45,7 +45,7 @@ class App extends React.Component<IWithFiles> {
 
                         </ul>
                     </aside>
-                    {/*<button onClick={() => this.props.sendFiles()}>SEND ALL!</button>*/}
+                    <button onClick={() => this.props.uploadFiles()}>SEND ALL!</button>
                 </section>
             </div>
         );

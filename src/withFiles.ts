@@ -11,6 +11,7 @@ const mapStateToProps = (fileUploader: FileUploader) => (state: { file: IFile })
 const mapDispatchToProps = (fileUploader: FileUploader) => (dispatch: Dispatch) => ({
     attachFile: (file: File) => dispatch(fileUploader.attachFile(file)),
     sendFile: (id: string) => dispatch(fileUploader.uploadFile(id)),
+    uploadFiles: () => dispatch(fileUploader.uploadFiles())
 });
 
 export const withFiles = (fileUploader: FileUploader) => connect(mapStateToProps(fileUploader), mapDispatchToProps(fileUploader));
@@ -19,4 +20,5 @@ export interface IWithFiles {
     files: IFile[],
     attachFile: (file: File) => void;
     sendFile: (id: string) => void;
+    uploadFiles: () => void;
 }

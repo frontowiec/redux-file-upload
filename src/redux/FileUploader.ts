@@ -1,8 +1,10 @@
-import {fromEvent} from "rxjs";
+import {concat, fromEvent, of} from "rxjs";
 import {Epic, ofType} from "redux-observable";
-import {map, mapTo, switchMap, tap} from "rxjs/operators";
+import {filter, map, mapTo, mergeMap, tap} from "rxjs/operators";
 import {Action} from "redux-actions";
 import {v4} from "uuid";
+import RequestRepository from "./RequestRepository";
+import FilesRepository from "./FilesRepository";
 
 enum FileUploadStatus {
     ATTACHED = 'attached',
@@ -33,58 +35,74 @@ interface IState {
 }
 
 class FileUploader {
-    private data: FormData;
-    private request: XMLHttpRequest;
+    private requestRepository: RequestRepository;
+    private filesRepository: FilesRepository;
     public progressEpic$: Epic;
     public errorEpic$: Epic;
     public loadEpic$: Epic;
+    public uploadFilesEpic$: Epic;
 
     constructor(private configuraton: IRequest) {
-        this.request = new XMLHttpRequest();
-        this.data = new FormData();
-
-        const onprogress$ = fromEvent(this.request.upload, 'progress');
-        const onerror$ = fromEvent(this.request, 'error');
-        const onload$ = fromEvent(this.request, 'load');
-
-        this.progressEpic$ = action$ => action$.pipe(
-            ofType('FILE_UPLOAD_STARTED'),
-            switchMap(({payload}) => onprogress$.pipe(
-                map((e: ProgressEvent) => ({
-                    type: 'FILE_PROGRESS_CHANGED',
-                    payload: {
-                        progress: Math.round((e.loaded / e.total) * 100),
-                        id: payload
-                    },
-                }))
-            ))
-        );
+        this.filesRepository = new FilesRepository();
+        this.requestRepository = new RequestRepository();
 
         this.loadEpic$ = action$ => action$.pipe(
             ofType('FILE_UPLOAD_STARTED'),
-            tap(() => {
+            tap(({payload}) => {
                 const {url, method, password, username, async = true} = this.configuraton;
-                this.request.open(method, url, async, username, password);
-                this.request.send(this.data);
+                this.requestRepository.getRequest(payload).open(method, url, async, username, password);
+                this.requestRepository.getRequest(payload).send(
+                    this.filesRepository.getFile(payload)
+                );
             }),
-            switchMap(({payload}) => onload$.pipe(
-                mapTo(({type: 'FILE_UPLOAD_SUCCESS', payload}))
-            ))
+            mergeMap(({payload}) =>
+                fromEvent(this.requestRepository.getRequest(payload), 'load').pipe(
+                    filter((e: ProgressEvent) => e.target!['status'] === 200),
+                    mapTo(({type: 'FILE_UPLOAD_SUCCESS', payload}))
+                ))
+        );
+
+        this.progressEpic$ = action$ => action$.pipe(
+            ofType('FILE_UPLOAD_STARTED'),
+            mergeMap(({payload}) =>
+                fromEvent(this.requestRepository.getRequest(payload).upload, 'progress').pipe(
+                    map((e: ProgressEvent) => ({
+                        type: 'FILE_PROGRESS_CHANGED',
+                        payload: {
+                            progress: Math.round((e.loaded / e.total) * 100),
+                            id: payload
+                        }
+                    }))
+                ))
         );
 
         this.errorEpic$ = action$ => action$.pipe(
             ofType('FILE_UPLOAD_STARTED'),
-            switchMap(({payload}) => onerror$.pipe(
-                mapTo(({type: 'FILE_UPLOAD_FAILURE', payload}))
-            ))
+            mergeMap(({payload}) =>
+                fromEvent(this.requestRepository.getRequest(payload), 'readystatechange').pipe(
+                    tap(console.log),
+                    filter(() => this.requestRepository.getRequest(payload).readyState === 4),
+                    filter(() => this.requestRepository.getRequest(payload).status !== 200),
+                    mapTo({type: 'FILE_UPLOAD_FAILURE', payload})
+                ))
+        );
+
+        this.uploadFilesEpic$ = action$ => action$.pipe(
+            ofType('UPLOAD_FILES'),
+            map(() => this.filesRepository.getIds().map(id => of({type: 'FILE_UPLOAD_STARTED', payload: id}))),
+            mergeMap((idObservable) => concat(...idObservable))
         );
     }
 
     public attachFile(payload: File) {
-        this.data.append(payload.name, payload);
+        const id = v4();
+        this.requestRepository.attach(id);
+        this.filesRepository.attach(id, payload);
+
         return {
             type: 'ATTACH_FILE',
             payload: {
+                id,
                 name: payload.name,
                 lastModified: payload.lastModified,
                 size: payload.size,
@@ -98,12 +116,16 @@ class FileUploader {
         return {type: 'FILE_UPLOAD_STARTED', payload: id};
     }
 
+    public uploadFiles() {
+        return {type: 'UPLOAD_FILES'};
+    }
+
     public removeFile(id: string) {
         // todo
     }
 
     public cancelFileUpload(id: string) {
-        this.request.abort();
+        this.requestRepository.getRequest(id).abort();
         return {type: 'FILE_UPLOAD_CANCELED'};
     }
 
@@ -112,12 +134,10 @@ class FileUploader {
 
         switch (type) {
             case 'ATTACH_FILE':
-                const id = v4();
                 return {
                     ...state,
-                    [id]: {
+                    [payload.id]: {
                         ...payload,
-                        id,
                         status: FileUploadStatus.ATTACHED,
                         progress: 0
                     }
