@@ -38,7 +38,9 @@ class App extends React.Component<IWithFiles> {
                                     <React.Fragment key={index}>
                                         <FileItem file={file}
                                                   progress={file.progress}/>
-                                        <button onClick={() => this.props.sendFile(file.id)}>SEND! {file.id}</button>
+                                        <button onClick={() => this.props.sendFile(file.id)}>SEND</button>
+                                        <button onClick={() => this.props.removeFile(file.id)}>REMOVE</button>
+                                        <button onClick={() => this.props.cancelFileUpload(file.id)}>CANCEL</button>
                                     </React.Fragment>
                                 ))
                             }
@@ -46,6 +48,7 @@ class App extends React.Component<IWithFiles> {
                         </ul>
                     </aside>
                     <button onClick={() => this.props.uploadFiles()}>SEND ALL!</button>
+                    <button onClick={() => this.props.clearAll()}>CLEAR ALL</button>
                 </section>
             </div>
         );

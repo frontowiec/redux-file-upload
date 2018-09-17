@@ -5,6 +5,7 @@ import {Action} from "redux-actions";
 import {v4} from "uuid";
 import RequestRepository from "./RequestRepository";
 import FilesRepository from "./FilesRepository";
+import {omit} from "lodash";
 
 enum FileUploadStatus {
     ATTACHED = 'attached',
@@ -121,12 +122,21 @@ class FileUploader {
     }
 
     public removeFile(id: string) {
-        // todo
+        // todo: cannot remove file when uploading
+        this.filesRepository.remove(id);
+        this.requestRepository.remove(id);
+        return {type: 'REMOVE_FILE', payload: id};
     }
 
     public cancelFileUpload(id: string) {
         this.requestRepository.getRequest(id).abort();
-        return {type: 'FILE_UPLOAD_CANCELED'};
+        return {type: 'FILE_UPLOAD_CANCELED', payload: id};
+    }
+
+    public clearAll() {
+        this.filesRepository.clearAll();
+        this.requestRepository.clearAll();
+        return {type: 'CLEAR_FILES'};
     }
 
     public reducer(state: IState = {}, action: Action<any>) {
@@ -189,6 +199,10 @@ class FileUploader {
                     ...state,
                     [payload.id]: fileProgress
                 };
+            case 'REMOVE_FILE':
+                return omit(state, payload);
+            case 'CLEAR_FILES':
+                return {};
             default:
                 return state;
         }

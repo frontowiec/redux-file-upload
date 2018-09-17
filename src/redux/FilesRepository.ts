@@ -17,12 +17,16 @@ class FilesRepository {
         return this.data[id];
     }
 
-    public getAll() {
-        return this.data;
-    }
-
     public getIds() {
         return keys(this.data);
+    }
+
+    public remove(id: string) {
+        delete this.data[id];
+    }
+
+    public clearAll() {
+        this.data = {};
     }
 }
 
