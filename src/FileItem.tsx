@@ -22,7 +22,6 @@ export class FileItem extends React.PureComponent<IProps, IState> {
     };*/
 
     render() {
-        console.log('render');
         const {file, progress} = this.props;
         return (
             <li>{file.name} - {file.size} bytes

@@ -1,1 +1,1 @@
-export const uploadFileUrl = 'http://localhost:5001/api/upload-file';
+export const uploadFileUrl = 'http://localhost:5002/api/upload-file';

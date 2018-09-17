@@ -1,7 +1,7 @@
 import {concat, fromEvent, of} from "rxjs";
-import {Epic, ofType} from "redux-observable";
+import {Epic} from "redux-observable";
 import {filter, map, mapTo, mergeMap, tap} from "rxjs/operators";
-import {Action} from "redux-actions";
+import {AnyAction} from "redux";
 import {v4} from "uuid";
 import RequestRepository from "./RequestRepository";
 import FilesRepository from "./FilesRepository";
@@ -35,6 +35,8 @@ interface IState {
     }
 }
 
+const ofTypeRegExp = (regexp: RegExp) => filter((action: AnyAction) => regexp.test(action.type));
+
 class FileUploader {
     private requestRepository: RequestRepository;
     private filesRepository: FilesRepository;
@@ -51,7 +53,8 @@ class FileUploader {
         this.requestRepository = new RequestRepository();
 
         this.loadEpic$ = action$ => action$.pipe(
-            ofType(/(.+)\/FILE_UPLOAD_STARTED/),
+            ofTypeRegExp(/(.*)\/FILE_UPLOAD_STARTED$/),
+            tap(console.log),
             tap(({payload}) => {
                 const {url, method, password, username, async = true} = this.requestConfiguration;
                 this.requestRepository.getRequest(payload).open(method, url, async, username, password);
@@ -67,7 +70,7 @@ class FileUploader {
         );
 
         this.progressEpic$ = action$ => action$.pipe(
-            ofType(/(.+)\/FILE_UPLOAD_STARTED/),
+            ofTypeRegExp(/(.*)\/FILE_UPLOAD_STARTED$/),
             mergeMap(({payload}) =>
                 fromEvent(this.requestRepository.getRequest(payload).upload, 'progress').pipe(
                     map((e: ProgressEvent) => ({
@@ -81,7 +84,7 @@ class FileUploader {
         );
 
         this.errorEpic$ = action$ => action$.pipe(
-            ofType(/(.+)\/FILE_UPLOAD_STARTED/),
+            ofTypeRegExp(/(.*)\/FILE_UPLOAD_STARTED$/),
             mergeMap(({payload}) =>
                 fromEvent(this.requestRepository.getRequest(payload), 'readystatechange').pipe(
                     filter(() => this.requestRepository.getRequest(payload).readyState === 4),
@@ -91,7 +94,7 @@ class FileUploader {
         );
 
         this.uploadFilesEpic$ = action$ => action$.pipe(
-            filter(action => /(.*)\/UPLOAD_FILES$/.test(action.type)),
+            ofTypeRegExp(/(.*)\/UPLOAD_FILES$/),
             tap(console.log),
             map(() => this.filesRepository.getIds().map(id => of({type: `${this.actionsPrefix}/FILE_UPLOAD_STARTED`, payload: id}))),
             mergeMap(idObservable => concat(...idObservable))
@@ -144,7 +147,7 @@ class FileUploader {
 
     public createReducer() {
         const prefix = this.actionsPrefix;
-        return function (state: IState = {}, action: Action<any>) {
+        return function (state: IState = {}, action: AnyAction) {
             {
                 const {type, payload} = action;
                 switch (type) {
