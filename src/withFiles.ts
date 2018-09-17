@@ -4,8 +4,8 @@ import {Dispatch} from "redux";
 import FileUploader from "./redux/FileUploader";
 import {values} from 'lodash';
 
-const mapStateToProps = (fileUploader: FileUploader) => (state: { file: IFile }) => ({
-    files: values(state.file)
+const mapStateToProps = (fileUploader: FileUploader) => (state: { [key: string]: IFile }) => ({
+    [fileUploader.getModuleName()]: values(state[fileUploader.getModuleName()])
 });
 
 const mapDispatchToProps = (fileUploader: FileUploader) => (dispatch: Dispatch) => ({
@@ -20,7 +20,7 @@ const mapDispatchToProps = (fileUploader: FileUploader) => (dispatch: Dispatch) 
 export const withFiles = (fileUploader: FileUploader) => connect(mapStateToProps(fileUploader), mapDispatchToProps(fileUploader));
 
 export interface IWithFiles {
-    files: IFile[],
+    [key: string]: any;
     attachFile: (file: File) => void;
     sendFile: (id: string) => void;
     uploadFiles: () => void;

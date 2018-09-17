@@ -3,7 +3,11 @@ import {combineEpics} from "redux-observable";
 import FileUploader from "./FileUploader";
 import {uploadFileUrl} from "../api";
 
-export const fileUploader = new FileUploader({method: 'POST', url: uploadFileUrl});
+export const fileUploaderA = new FileUploader('moduleA', {method: 'POST', url: `${uploadFileUrl}/A`});
+export const fileUploaderB = new FileUploader('moduleB', {method: 'POST', url: `${uploadFileUrl}/B`});
 
-export const rootEpic$ = combineEpics(fileUploader.progressEpic$, fileUploader.errorEpic$, fileUploader.loadEpic$, fileUploader.uploadFilesEpic$);
-export default combineReducers({file: fileUploader.reducer});
+export const rootEpic$ = combineEpics(
+    fileUploaderA.progressEpic$, fileUploaderA.errorEpic$, fileUploaderA.loadEpic$, fileUploaderA.uploadFilesEpic$,
+    fileUploaderB.progressEpic$, fileUploaderB.errorEpic$, fileUploaderB.loadEpic$, fileUploaderB.uploadFilesEpic$
+);
+export default combineReducers({moduleA: fileUploaderA.createReducer(), moduleB: fileUploaderB.createReducer()});

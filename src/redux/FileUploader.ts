@@ -38,19 +38,22 @@ interface IState {
 class FileUploader {
     private requestRepository: RequestRepository;
     private filesRepository: FilesRepository;
+    private actionsPrefix: string;
     public progressEpic$: Epic;
     public errorEpic$: Epic;
     public loadEpic$: Epic;
     public uploadFilesEpic$: Epic;
 
-    constructor(private configuraton: IRequest) {
+    constructor(private moduleName: string, private requestConfiguration: IRequest) {
+        this.createActionsPrefix();
+
         this.filesRepository = new FilesRepository();
         this.requestRepository = new RequestRepository();
 
         this.loadEpic$ = action$ => action$.pipe(
-            ofType('FILE_UPLOAD_STARTED'),
+            ofType(/(.+)\/FILE_UPLOAD_STARTED/),
             tap(({payload}) => {
-                const {url, method, password, username, async = true} = this.configuraton;
+                const {url, method, password, username, async = true} = this.requestConfiguration;
                 this.requestRepository.getRequest(payload).open(method, url, async, username, password);
                 this.requestRepository.getRequest(payload).send(
                     this.filesRepository.getFile(payload)
@@ -64,7 +67,7 @@ class FileUploader {
         );
 
         this.progressEpic$ = action$ => action$.pipe(
-            ofType('FILE_UPLOAD_STARTED'),
+            ofType(/(.+)\/FILE_UPLOAD_STARTED/),
             mergeMap(({payload}) =>
                 fromEvent(this.requestRepository.getRequest(payload).upload, 'progress').pipe(
                     map((e: ProgressEvent) => ({
@@ -78,10 +81,9 @@ class FileUploader {
         );
 
         this.errorEpic$ = action$ => action$.pipe(
-            ofType('FILE_UPLOAD_STARTED'),
+            ofType(/(.+)\/FILE_UPLOAD_STARTED/),
             mergeMap(({payload}) =>
                 fromEvent(this.requestRepository.getRequest(payload), 'readystatechange').pipe(
-                    tap(console.log),
                     filter(() => this.requestRepository.getRequest(payload).readyState === 4),
                     filter(() => this.requestRepository.getRequest(payload).status !== 200),
                     mapTo({type: 'FILE_UPLOAD_FAILURE', payload})
@@ -89,9 +91,10 @@ class FileUploader {
         );
 
         this.uploadFilesEpic$ = action$ => action$.pipe(
-            ofType('UPLOAD_FILES'),
-            map(() => this.filesRepository.getIds().map(id => of({type: 'FILE_UPLOAD_STARTED', payload: id}))),
-            mergeMap((idObservable) => concat(...idObservable))
+            filter(action => /(.*)\/UPLOAD_FILES$/.test(action.type)),
+            tap(console.log),
+            map(() => this.filesRepository.getIds().map(id => of({type: `${this.actionsPrefix}/FILE_UPLOAD_STARTED`, payload: id}))),
+            mergeMap(idObservable => concat(...idObservable))
         );
     }
 
@@ -101,7 +104,7 @@ class FileUploader {
         this.filesRepository.attach(id, payload);
 
         return {
-            type: 'ATTACH_FILE',
+            type: `${this.actionsPrefix}/ATTACH_FILE`,
             payload: {
                 id,
                 name: payload.name,
@@ -114,11 +117,11 @@ class FileUploader {
 
     public uploadFile(id: string) {
         // todo: check if this.data is not empty
-        return {type: 'FILE_UPLOAD_STARTED', payload: id};
+        return {type: `${this.actionsPrefix}/FILE_UPLOAD_STARTED`, payload: id};
     }
 
     public uploadFiles() {
-        return {type: 'UPLOAD_FILES'};
+        return {type: `${this.actionsPrefix}/UPLOAD_FILES`};
     }
 
     public removeFile(id: string) {
@@ -139,73 +142,85 @@ class FileUploader {
         return {type: 'CLEAR_FILES'};
     }
 
-    public reducer(state: IState = {}, action: Action<any>) {
-        const {type, payload} = action;
-
-        switch (type) {
-            case 'ATTACH_FILE':
-                return {
-                    ...state,
-                    [payload.id]: {
-                        ...payload,
-                        status: FileUploadStatus.ATTACHED,
-                        progress: 0
-                    }
-                };
-            case 'FILE_UPLOAD_STARTED':
-                const fileStarted = {
-                    ...state[payload],
-                    status: FileUploadStatus.STARTED,
-                    progress: 0
-                };
-                return {
-                    ...state,
-                    [payload]: fileStarted
-                };
-            case 'FILE_UPLOAD_CANCELED':
-                const fileCanceled = {
-                    ...state[payload],
-                    status: FileUploadStatus.CANCELED
-                };
-                return {
-                    ...state,
-                    [payload]: fileCanceled
-                };
-            case 'FILE_UPLOAD_SUCCESS':
-                const fileSuccess = {
-                    ...state[payload],
-                    status: FileUploadStatus.DONE,
-                    progress: 100
-                };
-                return {
-                    ...state,
-                    [payload]: fileSuccess
-                };
-            case 'FILE_UPLOAD_FAILURE':
-                const fileFailure = {
-                    ...state[payload],
-                    status: FileUploadStatus.ERROR
-                };
-                return {
-                    ...state,
-                    [payload]: fileFailure
-                };
-            case 'FILE_PROGRESS_CHANGED':
-                const fileProgress = {
-                    ...state[payload.id],
-                    progress: payload.progress
-                };
-                return {
-                    ...state,
-                    [payload.id]: fileProgress
-                };
-            case 'REMOVE_FILE':
-                return omit(state, payload);
-            case 'CLEAR_FILES':
-                return {};
-            default:
-                return state;
+    public createReducer() {
+        const prefix = this.actionsPrefix;
+        return function (state: IState = {}, action: Action<any>) {
+            {
+                const {type, payload} = action;
+                switch (type) {
+                    case `${prefix}/ATTACH_FILE`:
+                        return {
+                            ...state,
+                            [payload.id]: {
+                                ...payload,
+                                status: FileUploadStatus.ATTACHED,
+                                progress: 0
+                            }
+                        };
+                    case `${prefix}/FILE_UPLOAD_STARTED`:
+                        const fileStarted = {
+                            ...state[payload],
+                            status: FileUploadStatus.STARTED,
+                            progress: 0
+                        };
+                        return {
+                            ...state,
+                            [payload]: fileStarted
+                        };
+                    case `${prefix}/FILE_UPLOAD_CANCELED`:
+                        const fileCanceled = {
+                            ...state[payload],
+                            status: FileUploadStatus.CANCELED
+                        };
+                        return {
+                            ...state,
+                            [payload]: fileCanceled
+                        };
+                    case `${prefix}/FILE_UPLOAD_SUCCESS`:
+                        const fileSuccess = {
+                            ...state[payload],
+                            status: FileUploadStatus.DONE,
+                            progress: 100
+                        };
+                        return {
+                            ...state,
+                            [payload]: fileSuccess
+                        };
+                    case `${prefix}/FILE_UPLOAD_FAILURE`:
+                        const fileFailure = {
+                            ...state[payload],
+                            status: FileUploadStatus.ERROR
+                        };
+                        return {
+                            ...state,
+                            [payload]: fileFailure
+                        };
+                    case `${prefix}/FILE_PROGRESS_CHANGED`:
+                        const fileProgress = {
+                            ...state[payload.id],
+                            progress: payload.progress
+                        };
+                        return {
+                            ...state,
+                            [payload.id]: fileProgress
+                        };
+                    case `${prefix}/REMOVE_FILE`:
+                        return omit(state, payload);
+                    case `${prefix}/CLEAR_FILES`:
+                        return {};
+                    default:
+                        return state;
+                }
+            }
         }
+    }
+
+    public getModuleName() {
+        return this.moduleName;
+    }
+
+    private createActionsPrefix() {
+        this.actionsPrefix = this.moduleName.toUpperCase();
     }
 }
 
