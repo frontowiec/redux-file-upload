@@ -1,6 +1,3 @@
-import {concat, fromEvent, of} from "rxjs";
-import {Epic} from "redux-observable";
-import {filter, map, mapTo, mergeMap, tap} from "rxjs/operators";
 import {AnyAction} from "redux";
 import {v4} from "uuid";
 import RequestRepository from "./RequestRepository";
@@ -35,71 +32,16 @@ interface IState {
     }
 }
 
-const ofTypeRegExp = (regexp: RegExp) => filter((action: AnyAction) => regexp.test(action.type));
-
 class FileUploader {
-    private requestRepository: RequestRepository;
-    private filesRepository: FilesRepository;
     private actionsPrefix: string;
-    public progressEpic$: Epic;
-    public errorEpic$: Epic;
-    public loadEpic$: Epic;
-    public uploadFilesEpic$: Epic;
+    public requestRepository: RequestRepository;
+    public filesRepository: FilesRepository;
 
-    constructor(private moduleName: string, private requestConfiguration: IRequest) {
+    constructor(private moduleName: string, public requestConfiguration: IRequest) {
         this.createActionsPrefix();
 
         this.filesRepository = new FilesRepository();
         this.requestRepository = new RequestRepository();
-
-        this.loadEpic$ = action$ => action$.pipe(
-            ofTypeRegExp(/(.*)\/FILE_UPLOAD_STARTED$/),
-            tap(({payload}) => {
-                const {url, method, password, username, async = true} = this.requestConfiguration;
-                this.requestRepository.getRequest(payload).open(method, url, async, username, password);
-                this.requestRepository.getRequest(payload).send(
-                    this.filesRepository.getFile(payload)
-                );
-            }),
-            mergeMap(({payload}) =>
-                fromEvent(this.requestRepository.getRequest(payload), 'load').pipe(
-                    filter((e: ProgressEvent) => e.target!['status'] === 200),
-                    mapTo(({type: `${this.actionsPrefix}/FILE_UPLOAD_SUCCESS`, payload}))
-                ))
-        );
-
-        this.progressEpic$ = action$ => action$.pipe(
-            ofTypeRegExp(/(.*)\/FILE_UPLOAD_STARTED$/),
-            mergeMap(({payload}) =>
-                fromEvent(this.requestRepository.getRequest(payload).upload, 'progress').pipe(
-                    map((e: ProgressEvent) => ({
-                        type: `${this.actionsPrefix}/FILE_PROGRESS_CHANGED`,
-                        payload: {
-                            progress: Math.round((e.loaded / e.total) * 100),
-                            id: payload
-                        }
-                    }))
-                ))
-        );
-
-        this.errorEpic$ = action$ => action$.pipe(
-            ofTypeRegExp(/(.*)\/FILE_UPLOAD_STARTED$/),
-            mergeMap(({payload}) =>
-                fromEvent(this.requestRepository.getRequest(payload), 'readystatechange').pipe(
-                    filter(() => this.requestRepository.getRequest(payload).readyState === 4),
-                    filter(() => this.requestRepository.getRequest(payload).status !== 200),
-                    mapTo({type: `${this.actionsPrefix}/FILE_UPLOAD_FAILURE`, payload})
-                ))
-        );
-
-        this.uploadFilesEpic$ = action$ => action$.pipe(
-            ofTypeRegExp(/(.*)\/UPLOAD_FILES$/),
-            map(() => this.filesRepository.getIds().map(id => of({
-                type: `${this.actionsPrefix}/FILE_UPLOAD_STARTED`,
-                payload: id
-            }))),
-            mergeMap(idObservable => concat(...idObservable))
-        );
     }
 
     public attachFile(payload: File) {
@@ -224,7 +166,7 @@ class FileUploader {
     }
 
     private createActionsPrefix() {
-        this.actionsPrefix = this.moduleName.toUpperCase();
+        this.actionsPrefix = this.moduleName;
     }
 }
 
